@@ -1,0 +1,13 @@
+begin re 1
+now inint REMD
+all end!
+now inint REMD
+all end!
+now inint REMD
+
+ #-----  hhhh  all using time is 232.931860  -----#
+ 
+all end!
+now inint REMD
+all end!
+ok

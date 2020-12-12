@@ -55,14 +55,31 @@ class ReplicaExchange(object):
         assert size == self.n_replica  , "The number of process must equal number of replica !"
         if restart:
             self.restart = True
+        
+            
+        #init gromacs md.log
+        if rank == 0 :
+           gromacs_mdlog_mode= 'r+' if self.restart else 'w'
+           gromacs_mdlog_file = open("md.log", gromacs_mdlog_mode)
+           if self.restart != 0 :
+              gromacs_mdlog_file.write("Replica exchange interval: " + str(n_iterations) + "\n")
+              gromacs_mdlog_file.close()
         #read information in replica.out file
         paramlist, replica_file , start_iterations= self._init_paramlist_file(rank, size)
+
         idx = paramlist[rank]
         pre_param_idx = idx
         extime = 0
         self.logger.debug("rank %d, idx is %d, start_iteration=%d"%(rank, idx, start_iterations))
 
         for itera in range(start_iterations, n_iterations):
+
+            #save gromacs md.log
+            if rank == 0 :
+               gromacs_mdlog_file = open('md.log', 'a')
+               gromacs_mdlog_file.write("Replica exchange at step " + str(self.exchange_interval * (itera + 1 )) + "  time " + str(self.exchange_interval * (itera + 1) * 2 / 1000)+ "\n")
+               gromacs_mdlog_file.flush()
+
             # step 1:init_parameter
             #print("rank %d in range(%d) get param %d" % (rank, itera, idx))
             self.setParameters(self.simulation, replica_parameters, idx)
@@ -87,6 +104,9 @@ class ReplicaExchange(object):
 
             if rank == 0 and itera + 1 != n_iterations :
                self._write_paramlist_file(replica_file, paramlist, itera+1)
+
+            
+            
 
         #save
         #self.logger.info("The exchange proportion of replia %d is %f !"%(rank, 1.0 * extime/n_iterations))
@@ -178,6 +198,7 @@ class ReplicaExchange(object):
 
            # Do nothing for exchange file
         else:
+            restartlog = open('restart.log', 'w')
             # Initially, each replica just has its corresponding
             # parameter set.
             paramlist = np.arange(self.n_replica).astype(int)
@@ -195,6 +216,7 @@ class ReplicaExchange(object):
             return
         replica_file.write("%d: "%(itera) + ", ".join([str(e) for e in paramlist]) + "\n")
         replica_file.flush()
+        
 
     @staticmethod
     def create_replica_paramlist(n_replicas, templist = None):

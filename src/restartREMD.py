@@ -16,7 +16,10 @@ n_proc = comm.Get_size()
 begintime = MPI.Wtime()
 #output GPU and  host
 
-restart_time = 1
+restart = True
+restart_time = 1 + len(open("restart.log",'r+').readlines())
+print("now restart " + str(restart_time))
+
 n_replicas = 4
 n_iterations = 100
 savelogstep = 500
@@ -52,7 +55,7 @@ print("now inint REMD")
 remd = ReplicaExchange(this_simulation = simulation, n_replica= n_replicas, exchange_interval = ex_interval)
 templist = [300.00, 303.19, 306.40, 309.63, 310.00]
 replicaslist = ReplicaExchange.create_replica_paramlist(n_replicas = n_replicas, templist = templist)
-remd.run(replica_parameters=replicaslist, n_iterations = n_iterations, restart = True)
+remd.run(replica_parameters=replicaslist, n_iterations = n_iterations, restart = restart)
 if rank == 0:
    time = MPI.Wtime()-begintime
    print("\n #-----  hhhh  all using time is %f  -----#\n "%(time))

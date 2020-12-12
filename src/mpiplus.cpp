@@ -47,25 +47,11 @@ void init_partners(std::vector<std::pair<int, int> >& partners, int comm_size, i
 	partners.clear();
 	//DebugPrintf("C++ pre partner %d :", isodd);
 	if (ex_kind == 1) {
-		if (isodd) {
-			for (int i = 0; i < comm_size; i += 2) {
-				partners.push_back(std::make_pair(i, i + 1));
+		for (int i =  nowitera % 2; i < comm_size - 1; i += 2) {
+			partners.push_back(std::make_pair(i, i + 1));
 				//DebugPrintf("(%d,%d) ", i, i + 1);
-			}
-			//DebugPrintf("end \n");
 		}
-		else {
-			for (int i = 0; i < comm_size; i += 2) {
-				if (i == 0) {
-					partners.push_back(std::make_pair(i, comm_size - 1));
-					//DebugPrintf("(%d,%d) ", i, comm_size - 1);
-					continue;
-				}
-				partners.push_back(std::make_pair(i - 1, i));
-				//DebugPrintf("(%d,%d) ", i - 1, i);
-			}
 			//DebugPrintf("end \n");
-		}
 	}
 	else if (ex_kind == 2) {
 		throw "Exchange kind not exist!";
@@ -93,7 +79,13 @@ long getExchange(MPI_Comm comm, int nowitera, double* replica_state, int state_s
 	}
 	return idx;
 }
-
+#include <sstream>
+template<typename T> std::string toString(const T& t)
+{
+	std::ostringstream oss;  //创建一个格式化输出流
+	oss << t;             //把值传递如流中
+	return oss.str();
+}
 long master(MPI_Comm comm, int nowitera, double* replica_state, int state_size, long*& paramlist, int ex_kind, int md_kind)
 {
 	/*
@@ -104,11 +96,12 @@ long master(MPI_Comm comm, int nowitera, double* replica_state, int state_size, 
 	  * ex_kind: exchange with who
 	  * md_kind: md/mc ? md+mc
 	*/
-	double* states;
+	double* states; //
 	int s_size, comm_size, comm_rank, n_replica;
 	long idx;
-	std::vector<std::pair<int, int> > partners;
-	std::vector<std::pair<int, int> > ex_partner_id;
+	std::string ex_info, acceptence_info;
+	std::vector<std::pair<int, int> > partners; //(a,b) try to ex
+	std::vector<std::pair<int, int> > ex_partner_id;//(a,b) need to ex 
 	MPI_Comm_size(comm, &comm_size);
 	MPI_Comm_rank(comm, &comm_rank);
 
@@ -122,7 +115,8 @@ long master(MPI_Comm comm, int nowitera, double* replica_state, int state_size, 
 
 	/*gather states;*/
 	MPI_Gather(replica_state, state_size, MPI_DOUBLE, states, state_size, MPI_DOUBLE, 0, comm);
-
+    
+#ifdef DEBUG 
 	DebugPrintf("DEBUG[c++]:(%d) preparamlist = ", nowitera);
 	for (int i = 0; i < comm_size; i++) {
 		DebugPrintf("%d ", paramlist[i]);
@@ -132,28 +126,66 @@ long master(MPI_Comm comm, int nowitera, double* replica_state, int state_size, 
 		DebugPrintf("%f ", states[i]);		
 	}
 	DebugPrintf("\n");
+#endif
+
 	/*判断交换*/
-	acceptance_exchange(states, state_size, partners, ex_partner_id, md_kind);
+	//acceptance_exchange(states, state_size, partners, ex_partner_id, md_kind); 直接将函数代码拿出来了，不想传那么多参数了
+	 
+
+	ex_partner_id.clear();
+	srand((time(NULL)));
+	//DebugPrintf("DEBUG: now in accc  size is %d , md_kind is \n", partners.size(), md_kind);
+	for (int i = 0; i < partners.size(); i++) {
+		int a = partners[i].first, b = partners[i].second;
+		if (md_kind == 1) {
+			DebugPrintf("DEBUG[c++]: now judge (%d,%d): \n", a, b);
+			bool acc = get_acceptance(states + (a * state_size), states + (b * state_size), acceptence_info); //  // 
+			//printf("%d with %d is %d\n", a, b, acc);
+			//acc = true;
+			if (acc) {
+				ex_partner_id.push_back(std::make_pair(a, b));
+				ex_info.append("  " + toString(a) + "  x  " + toString(b) + "  ");
+			}
+			else {
+				ex_info.append("  " + toString(a) + "    " + toString(b) + "  ");
+			}
+		}
+		else {
+			throw "The kind of md is error!\n";
+		}
+	}
+	// gromacs md.log 信息
+	if (nowitera % 2 == 0)
+		ex_info.insert(0, "Repl ex  ");
+	else {
+		ex_info.insert(0, "Repl ex   0  ");
+		ex_info.append("  " + toString(comm_size - 1));
+	}
+	acceptence_info.insert(0, "Repl pr  ");
+
+#ifdef DEBUG 
 	DebugPrintf("DEBUG[c++]:(%d) ", nowitera);
 	for (int i = 0; i < ex_partner_id.size(); i++) {
 		DebugPrintf("ex(%d,%d) ", ex_partner_id[i].first, ex_partner_id[i].second);
 	}
 	DebugPrintf("\nDEBUG[c++]:(%d) exsize is %d now is exchange\n", nowitera, ex_partner_id.size());
-
+#endif
 
 	/*交换*/
 	exchange(paramlist, ex_partner_id);
 
+#ifdef DEBUG 
 	DebugPrintf("DEBUG[c++]:(%d) now newparamlist = ", nowitera);
 	for (int i = 0; i < comm_size; i++) {
 		DebugPrintf("%d ", paramlist[i]);
 	}
 	DebugPrintf("\n");
+#endif
 
 	//分配 paramlist idx
 	MPI_Scatter(paramlist, 1, MPI_LONG, &idx, 1, MPI_LONG, 0, comm);
 
-	writeinfo(nowitera, partners);
+	writeinfo(nowitera,  ex_info, acceptence_info);
 
 	free(states);
 	partners.clear();
@@ -220,13 +252,13 @@ void acceptance_exchange(double* states, int state_size, std::vector<std::pair<i
 	for (int i = 0; i < partners.size(); i++) {
 		int a = partners[i].first, b = partners[i].second;
 		if (md_kind == 1) {
-			DebugPrintf("DEBUG[c++]: now judge (%d,%d): \n",a , b);
-			bool acc = get_acceptance(states + (a * state_size), states + (b * state_size)); //  // 
+			DebugPrintf("DEBUG[c++]: now judge (%d,%d): \n", a, b);
+			/* bool acc = get_acceptance(states + (a * state_size), states + (b * state_size)); //  // 
 			//printf("%d with %d is %d\n", a, b, acc);
 			//acc = true;
 			if (acc) {
 				ex_partner_id.push_back(std::make_pair(a, b));
-			}
+			}*/
 		}
 		else {
 			throw "The kind of md is error!\n";
@@ -235,7 +267,7 @@ void acceptance_exchange(double* states, int state_size, std::vector<std::pair<i
 
 }
 
-bool get_acceptance(double* state_a, double* state_b)
+bool get_acceptance(double* state_a, double* state_b, std::string &acceptance_info)
 {
 	/*
 	  calculate the exchange probability ,if ok return true, else returen false.
@@ -252,44 +284,30 @@ bool get_acceptance(double* state_a, double* state_b)
 	//delta *= 1000;
 	double delta = ((ua - ub) * (1 / (r * ta) - 1 / (r * tb))) * 1000;
 	double randx = rand() / double(RAND_MAX);
+	double pr = exp(delta);
+	acceptance_info.append(" " + toString(pr));
 	DebugPrintf("            ua = %f,ta= %f,ub= %f, tb= %f\n            randx = %f < exp(%f) = %f ?\n",  ua, ta, ub, tb, randx, delta, exp(delta));
-	if (delta >= 0.0 || randx < exp(delta))
+	if (delta >= 0.0 || randx < pr)
 		return true;
 	else
 		return false;
 }
 
-
-
-void writeinfo(int nowitera, std::vector<std::pair<int, int> >& partners)
+void writeinfo(int nowitera, std::string ex_info, std::string acceptance_info)
 {
 	/*
 
 	*/
-	if (nowitera == 0) {
-		std::ofstream outfile("ex_pair.out", std::ios::out);
-		if (!outfile.is_open())
-		{
-			throw "Outfile can't open!";
-		}
-		outfile << "now_iteration";
-		for (int i = 0; i < partners.size(); i++) {
-			outfile << "  replica" << i << " with " << "replica" << i + 1;
-		}
-		outfile << std::endl;
-		outfile.close();
-	}
-	std::ofstream outfile("ex_pair.out", std::ios::app);
+	std::ofstream outfile("md.log", std::ios::app);
 	if (!outfile.is_open())
 	{
 		throw "Outfile can't open!";
 	}
 	//DebugPrintf("now write\n");
-	outfile << nowitera << ":";
-	for (int i = 0; i < partners.size(); i++) {
-		outfile << "  " << partners[i].first << " " << partners[i].second;
-	}
+	outfile << ex_info;
 	outfile << std::endl;
+	outfile << acceptance_info;
+	outfile << std::endl  << std::endl;
 	outfile.close();
 
 }

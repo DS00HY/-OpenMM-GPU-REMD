@@ -3,7 +3,7 @@
 #SBATCH -o job-%j.log
 #SBATCH -e job-%j.err
 #SBATCH -p baode_gpu_short
-#SBATCH -t 200
+#SBATCH -t 5:00
 #SBATCH -N 1
 #SBATCH --gres=gpu:1
 ###SBATCH --ntasks-per-node=4

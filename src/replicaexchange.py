@@ -31,7 +31,7 @@ class ReplicaExchange(object):
         self.restart = False
         self.restartpre = False
         self.replica_file = replica_file
-
+        self.itera = 0
         if len(sys.argv) >= 2:
             logging.basicConfig(format='DEBUG[Python]: %(process)d-%(message)s ', filename='debug.log', level=logging.DEBUG)
         else:
@@ -152,6 +152,9 @@ class ReplicaExchange(object):
         p = sqrt(Tnew/Told)
         #print("rescale p is %f"% p )
         # Rescale velocitiess
+        self.itera += 1
+        if self.comm.Get_rank() == 0:
+            self.logger.debug(" [%d] :Tnew = %f ,Told = %frank0\n" % (self.itera, Tnew, Told))
         velocities = self.simulation.context.getState(getVelocities=True).getVelocities(asNumpy=True)
         self.simulation.context.setVelocities(p * velocities)
 

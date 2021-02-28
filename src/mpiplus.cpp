@@ -1,4 +1,5 @@
 #include "mpiplus.h"
+#include <random>
 #include <stdarg.h>
 //#define DEBUG
 //#undef DEBUG
@@ -62,8 +63,42 @@ void init_partners(std::vector<std::pair<int, int> >& partners, int comm_size, i
 		return;
 	}
 }
-
-
+void init_partners_v2(std::vector<std::pair<int, int> >& partners, int comm_size, int nowitera, int ex_kind, long* paramlist )
+{
+	/*
+ * 	  init the exchange partners, odd exchange or even exchange
+ *
+ * 	  	  * partners: save the exchange partners
+ * 	  	  	  * comm_size: size of partners
+ * 	  	  	  	  * isodd: odd exchange or even exchange
+ * 	  	  	  	  	  * ex_kind: exchange kind
+ *
+ * 	  	  	  	  	  	*/
+	partners.clear();
+	int* map_paramlist;
+	map_paramlist = (int*)malloc(comm_size * sizeof(int));
+	for (int i = 0; i < comm_size; i++) {
+		map_paramlist[paramlist[i]] = i;
+	}
+	DebugPrintf("DEBUG[c++]:(%d) first ex partner is T( %d - %d) \n", nowitera, nowitera % 2, (nowitera % 2 + 1));
+	if (ex_kind == 1) {
+		for (int i = nowitera % 2; i < comm_size - 1; i += 2) {
+			partners.push_back(std::make_pair(map_paramlist[i], map_paramlist[i + 1]));
+			
+		}
+		free(map_paramlist);
+	}
+	else if (ex_kind == 2) {
+		free(map_paramlist);
+		throw "Exchange kind not exist!";
+		return;
+	}
+	else {
+		free(map_paramlist);
+		throw "Exchange kind not exist!";
+		return;
+	}
+}
 long getExchange(MPI_Comm comm, int nowitera, double* replica_state, int state_size, long* paramlist, int param_size, int ex_kind, int md_kind) {
 
 	int  comm_rank;
@@ -111,8 +146,8 @@ long master(MPI_Comm comm, int nowitera, double* replica_state, int state_size, 
 	s_size = state_size * comm_size;
 	init_states(states, s_size);
 	/*init partners*/
-	init_partners(partners, comm_size, nowitera, ex_kind);
-
+	//init_partners(partners, comm_size, nowitera, ex_kind);
+        init_partners_v2(partners, comm_size, nowitera, ex_kind, paramlist);
 	/*gather states;*/
 	MPI_Gather(replica_state, state_size, MPI_DOUBLE, states, state_size, MPI_DOUBLE, 0, comm);
     
@@ -133,7 +168,8 @@ long master(MPI_Comm comm, int nowitera, double* replica_state, int state_size, 
 	 
 
 	ex_partner_id.clear();
-	srand((time(NULL)));
+	if(nowitera == 0)
+           srand((time(NULL)));
 	//DebugPrintf("DEBUG: now in accc  size is %d , md_kind is \n", partners.size(), md_kind);
 	for (int i = 0; i < partners.size(); i++) {
 		int a = partners[i].first, b = partners[i].second;
@@ -247,7 +283,6 @@ void acceptance_exchange(double* states, int state_size, std::vector<std::pair<i
 
 	*/
 	ex_partner_id.clear();
-	srand((time(NULL)));
 	//DebugPrintf("DEBUG: now in accc  size is %d , md_kind is \n", partners.size(), md_kind);
 	for (int i = 0; i < partners.size(); i++) {
 		int a = partners[i].first, b = partners[i].second;

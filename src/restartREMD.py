@@ -15,36 +15,41 @@ n_proc = comm.Get_size()
 #logging.basicConfig(level = logging.DEBUG)
 begintime = MPI.Wtime()
 #output GPU and  host
+device_index = os.environ.get("CUDA_VISIBLE_DEVICES")
+nodename = socket.gethostname()
+#logging.info("    !------!!! rank is %i, nodename = %s, idx = %s!!----- "%(rank, nodename, device_index))
+print("    !------!!! rank is %i, nodename = %s, idx = %s!!----- "%(rank, nodename, device_index))
 
-restart = True
-restart_time = 1 + len(open("restart.log",'r+').readlines())
-print("now restart " + str(restart_time))
 
-n_replicas = 4
-n_iterations = 100
-savelogstep = 500
-savepdbstep = 500
-ex_interval = 1000
-input_path = "/public/home/yinghuang/test/INPUTS_Hexa/"
-include_path = "/public/home/yinghuang/test/top"
+restart_time = 1
+n_replicas = n_proc
+n_iterations = 20000
+savelogstep = 5000
+savepdbstep = 5000
+ex_interval = 5000
+input_path = "/home/siat/scratch/HY/remd-2-2L1Q_new/include/"
+include_path = "/home/siat/project/HY/top"
 _OUTPUT_PATH = "out/"
+templist = [300.0, 303.07, 306.18, 309.33, 312.51, 315.73, 318.98, 322.28, 325.61, 328.97, 332.37, 335.81, 339.28, 342.79, 346.33, 349.91, 353.52, 357.17, 360.84, 364.55, 368.3, 372.07, 375.87, 379.71, 383.58, 387.47, 391.4, 395.35, 399.33, 403.34, 407.38, 411.44, 415.52, 419.64, 423.77, 427.93, 432.12, 436.32, 440.55, 444.8, 449.07, 453.36, 457.67, 462.0, 466.34, 470.71, 475.09, 479.49]
 
 plat= Platform.getPlatformByName('CUDA')
-#prop = {'DeviceIndex': str(rank%2), 'Precision': 'double'}
-prop = {'Precision': 'double'}
-gro = GromacsGroFile(input_path+'AFP_phy_tip3p.gro')
-top = GromacsTopFile(input_path+'AFP_phy_tip3p.top', periodicBoxVectors=gro.getPeriodicBoxVectors(),
+#prop = {'DeviceIndex': str(rank%4), 'Precision': 'single'}
+#prop = {'DeviceIndex': '0', 'Precision': 'single'}
+prop = {'Precision': 'single'}
+#prop = {'Precision': 'double'}
+gro = GromacsGroFile(input_path+'init%d.gro'%(3 + rank%8))
+top = GromacsTopFile(input_path+'fws_plus.top', periodicBoxVectors=gro.getPeriodicBoxVectors(),
         includeDir=include_path)
-system = top.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+system = top.createSystem(nonbondedMethod=PME, nonbondedCutoff=1.2*nanometer,
         constraints=HBonds)
-temp = 310.0 * kelvin
+temp = templist[rank] * kelvin
 integrator = VerletIntegrator(0.002*picoseconds)
-tstat = AndersenThermostat(310, 1/picosecond)
+tstat = AndersenThermostat(templist[rank], 1/picosecond)
 system.addForce(tstat)
 
 #integrator = LangevinIntegrator(300*kelvin, 1/picosecond, 0.002*picoseconds)
-#simulation = Simulation(top.topology, system, integrator, plat, prop)
-simulation = Simulation(top.topology, system, integrator,plat)
+simulation = Simulation(top.topology, system, integrator,plat,prop)
+#simulation = Simulation(top.topology, system, integrator,plat)
 simulation.context.setPositions(gro.positions)
 simulation.context.setVelocitiesToTemperature(temp)
 #simulation.minimizeEnergy()
@@ -53,11 +58,11 @@ simulation.reporters.append(PDBReporter('out/out%i-%i.pdb' % (comm.Get_rank(),re
 simulation.reporters.append(StateDataReporter('out/md%i-%i.log' % (comm.Get_rank(),restart_time), savelogstep, step=True, potentialEnergy=True, kineticEnergy = True, totalEnergy = True, temperature=True, speed = True))
 print("now inint REMD")
 remd = ReplicaExchange(this_simulation = simulation, n_replica= n_replicas, exchange_interval = ex_interval)
-templist = [300.00, 303.19, 306.40, 309.63, 310.00]
 replicaslist = ReplicaExchange.create_replica_paramlist(n_replicas = n_replicas, templist = templist)
-remd.run(replica_parameters=replicaslist, n_iterations = n_iterations, restart = restart)
+remd.run(replica_parameters=replicaslist, n_iterations = n_iterations, restart = True)
 if rank == 0:
    time = MPI.Wtime()-begintime
    print("\n #-----  hhhh  all using time is %f  -----#\n "%(time))
 print("all end!")
+
 

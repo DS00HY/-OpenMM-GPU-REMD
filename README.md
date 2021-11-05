@@ -1,60 +1,57 @@
 # REMD
 
-本程序是基于OpenMM实现的跨节点GPU并行REMD框架。
+This program is based on OpenMM implementation of cross-node GPU parallel REMD framework.
 
-## 目录
+## Catalog
 
-- [使用说明](#使用说明)
-- [待开发问题](#待开发问题)
+- [Instructions](#Instructions)
+- [Problem to be developed](#Problem to be developed)
 
 
-### 使用说明
+### Instructions
 
-#### 1.安装
-在使用之前确保当前环境已经包含下面工具
-- MPICH: 版本高于3.3
+#### 1.Install
+Make sure the following tools are included in your current environment before you use them
+- MPICH: Version later than 3.3
 - SWIG
-- Anaconda，并且安装好Python的Numpy、MPI4PY、OpenMM包
+- Anaconda,Install the Python Numpy MPI4PY OpenMM package
 - GCC
 - Make
 - CUDA
 
-#### 2.C++部分编译
+#### 2.C++ partial compilation
 
-- 在源码文件输入命令“make build”，便开始执行编译过程。
-- 如果没有提示错误，目录下生成mpiplus_wrap.cxx, mpiplus.py,_mpiplus.so三个文件则说明编译成功，
-  c++的扩展代码可以当做Python包正常使用了。
-- 如果想删除编译的代码，可以输入“make clean”。
-- 在Makefile的第22行，可以设置是否开启debug模式，输出C++的信息，如果不想开启debug模式，将22行的${DEBUG}注释掉即可。
-- 如果担心C++代码的编译情况，可以写一个简单的测试脚本来测试C++部分是否可以正常运行，
-  可以以附录中test.py为例进行测试。将test.py代码运行，如果结果为没有运行错误，
-  并且查看C++和Python代码输出的paramlist和id相互对应，即可说明C++代码编译成功，并且功能正常。
- （其中test.py其26行中getExchange_func()函数是mpiplus模块提供给Python的调用接口，comm为MPI.COMM, i表示当前的迭代次数，state表示当前进程的需要传递给主进程的状态数组，paramlist为进程的参数列表，ex_kind和md_kind为后续开发选项，目前值只支持(1,1)一种。） 
+- Enter the command "make build" in the source file to begin the compilation process.
+- If there is no error. Mpiplus_wrap. CXX, mpiplus.py and _mpiplus.so files generated in the directory indicate that the compilation is successful and the c++ extension code can be used as a Python package
+- If you want to remove compiled code, type "make clean".
+- In line 22 of the Makefile, you can set whether to enable debug mode and output C++ messages. If you do not want to enable debug mode, comment out ${debug} on line 22.
+- If you are worried about C++ code compiling, you can write a simple test script to see if the C++ part works properly.
+  You can use test.py as an example in the appendix. Run the test.py code.If the paramlist and id of the C++ and Python codes correspond to each other, the C++ codes are compiled successfully and function properly(test.py getExchange_func() in line 26 is the call interface provided by the mpiplus module to Python. Comm is MPI.COMM.I stands for the current iteration number,state stands for the state array that the current process needs to pass to the main process,paramlist is the parameter list of the process,ex_kind and md_kind are the options for subsequent development, currently only (1,1) are supported.
 
-#### 3.REMD使用
+#### 3.REMD 
 
-- 以4个副本的testREMD.py的脚本跨节点运行的资源分配命令如下：
+- The resource allocation commands run across nodes as a script with four replicas of testremd.py are as follows:
    python setconfigfile.py --np 4 python testREMD.py -debug
-   其中-np 指定运行的副本数目，testREMD.py为需要分配节点资源运行的REMD程序，-debug命令为是否输出相关的debug信息。该命令完成后，会生成configfile 和hostfile两个文件来保存进程的运行信息。
-- 将代码运行到指定节点和GPU上，在脚本中继续输入以下命令即可：
+   In the command, -np specifies the number of copies to run, testremd. py specifies the REMD program that needs to allocate node resources to run, and -debug specifies whether to output debugging information. After the command is executed, the configfile and hostfile files are generated to save the running information of the process.
+- Run the code on the specified node and GPU, and enter the following command in the script:
      mpiexec.hydra -f hostfile -configfile configfile
-     实际运行的脚本可以参考run.sh/ rerun.sh的写法
-- 结果输出：以样例testREMD.py的测试结果的输出为例:
-   PDB	out/out0.pdb, out/out1.pdb.... 
-   模拟信息	out/md0.log, out/md1.log....
-   Debug信息	debug.log
-   每次交换对象	ex_pair.out
-   温度副本参数	replica.out
-   断点文件	Checkpoint0.44 (副本0，第44次迭代的断点)
-   其中值得说明的是，replica.out的最后一行为下一次迭代的次序，还有每个副本应该使用的温度列表的id，因此该文件也是断点重启的重要依据。
-#### 4.断点重启
-如果需要断点重启，在原来程序的基础上，将REMD.run()的restart参数设置为True即可开始继续运行。需要注意的是其模拟结果的输出文件最好进行编号，以副本0为例，进行第一次重启的pbd可以命名为out0-1.pdb，第二次为out0-2.pdb。如果采用这种命名方式，可以使用提供的mergepdb.py进行pdb的整合。将所有的out0.pdb, out0-1.pdb, ... , out0-n.pdb以及保存重启信息的restart.log文件与mergepdb程序放到一起，使用mergerpdb中定义的函数get_pdb(pdb_numb, rank, pdb_iteration, n_iteration)，即可将多次重启的pdb文件进行整合，该函数的参数pdb_numb表示需要整合的pdb数目，rank表示当前副本号，pdb_iteration为运行代码中的pdb存储间隔，n_iteration表示运行的总次数。
-实际运行的程序可以参考restartREMD.py, 提交脚本为rerun.sh的写法。
+     For actual scripts, see run.sh/ rerun
+- Result output: Take the output of the test result of sample testremd.py as an example:
+PDB	out/out0.pdb, out/out1.pdb....
+Simulation information out/md0.log, out/md1.log....
+The Debug information the Debug log
+Ex_pair.out is exchanged each time
+Temperature replica parameter replica.out
+Breakpoint file Checkpoint0.44 (replica 0, breakpoint for iteration 44)
+It is worth explaining that the last act of replica.out is the order of the next iteration and the ID of the temperature list that should be used by each replica. Therefore, this file is also an important basis for breakpoint restart.
+#### 4.Checkpoint Restart
+If you need a breakpoint restart, set the restart parameter of remd.run () to True to resume the original program. Note that the output file of the simulation result should be numbered. Take replica 0 as an example. The PBD for the first restart can be named out0-1.pdb and the PBD for the second restart can be out0-2.pdb. If this is the case, you can use the provided mergepdb.py for PDB integration. Out0.pdb, out0-1.pdb,... , out0-n.pdb and the restart.log file that holds the restart information are put together with the Mergepdb program using the get_pDB (pdb_numb, rank, pdb_Iteration, n_iteration) function defined in mergerPDB. Pdb_numb indicates the number of PDB files to be consolidated, rank indicates the current replica number, pdb_Iteration indicates the interval between PDB files to be consolidated, and n_iteration indicates the total number of PDB files to be consolidated.
+The actual running program can refer to restartremd.py and submit the script as rerun.sh.
 
 
-### 待开发问题
+### Problem to be developed
 
-- 让用户指定温度连续还是轨迹连续
-- 结果pdb的压缩存储
-- 与Gromacs匹配
+- Lets the user specify whether the temperature is continuous or the trajectory is continuous
+- Compressed storage of the result PDB
+- Matches Gromacs
 
